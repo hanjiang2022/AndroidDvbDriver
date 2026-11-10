@@ -24,7 +24,7 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="tune">Tune</string>
-    <string name="defaultFreqMhz">506</string>
+    <string name="defaultFreqMhz">474</string>
     <string name="hardware_ready">Hardware ready</string>
     <string name="has_signal">Has signal</string>
     <string name="carrier">Carrier</string>

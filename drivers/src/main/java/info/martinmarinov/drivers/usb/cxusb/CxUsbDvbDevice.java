@@ -43,6 +43,7 @@ import info.martinmarinov.drivers.R;
 import info.martinmarinov.drivers.tools.I2cAdapter;
 import info.martinmarinov.drivers.usb.generic.AbstractGenericDvbUsbDevice;
 import info.martinmarinov.usbxfer.AlternateUsbInterface;
+import info.martinmarinov.drivers.tools.SleepUtils;
 
 public abstract class CxUsbDvbDevice extends AbstractGenericDvbUsbDevice {
     private final static String TAG = CxUsbDvbDevice.class.getSimpleName();
@@ -68,6 +69,16 @@ public abstract class CxUsbDvbDevice extends AbstractGenericDvbUsbDevice {
     public final static byte CMD_ANALOG  = 0x50;
     public final static byte CMD_DIGITAL = 0x51;
 
+/*
+    protected void t230aGpioReset() throws DvbException {
+        cxusb_ctrl_msg(CMD_GPIO_WRITE, new byte[]{(byte)0x87, 0}, 2, new byte[1], 1);
+        cxusb_ctrl_msg(CMD_GPIO_WRITE, new byte[]{(byte)0x86, 1}, 2, new byte[1], 1);
+        cxusb_ctrl_msg(CMD_GPIO_WRITE, new byte[]{(byte)0x80, 0}, 2, new byte[1], 1);
+        SleepUtils.mdelay(100);
+        cxusb_ctrl_msg(CMD_GPIO_WRITE, new byte[]{(byte)0x80, 1}, 2, new byte[1], 1);
+        SleepUtils.mdelay(50);
+    }
+*/
     public static final int SI2168_TS_PARALLEL = 0x06;
     public static final int SI2168_TS_SERIAL   = 0x03;
 
@@ -110,6 +121,7 @@ public abstract class CxUsbDvbDevice extends AbstractGenericDvbUsbDevice {
         if (controlEndpointIn.getAddress() != 0x81 || controlEndpointIn.getDirection() != USB_DIR_IN) throw new DvbException(DVB_DEVICE_UNSUPPORTED, resources.getString(R.string.unexpected_usb_endpoint));
         if (controlEndpointOut.getAddress() != 0x01 || controlEndpointOut.getDirection() != USB_DIR_OUT) throw new DvbException(DVB_DEVICE_UNSUPPORTED, resources.getString(R.string.unexpected_usb_endpoint));
         if (endpoint.getAddress() != 0x82 || endpoint.getDirection() != USB_DIR_IN) throw new DvbException(DVB_DEVICE_UNSUPPORTED, resources.getString(R.string.unexpected_usb_endpoint));
+
     }
 
     @Override
@@ -145,6 +157,7 @@ public abstract class CxUsbDvbDevice extends AbstractGenericDvbUsbDevice {
     }
 
     synchronized void cxusb_ctrl_msg(byte cmd, @NonNull byte[] wbuf, int wlen, @Nullable byte[] rbuf, int rlen) throws DvbException {
+        
         if (1 + wlen > MAX_XFER_SIZE) {
             throw new DvbException(BAD_API_USAGE, resources.getString(R.string.bad_api_usage) + "\n" + "i2c wr: len=" + wlen + " is too big!");
         }

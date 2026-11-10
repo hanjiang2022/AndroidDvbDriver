@@ -4,7 +4,7 @@
     <string name="start">Start</string>
     <string name="stop">Stopp</string>
     <string name="tune">Still inn</string>
-    <string name="defaultFreqMhz">506</string>
+    <string name="defaultFreqMhz">474</string>
     <string name="hardware_ready">Maskinvaren er klar</string>
     <string name="has_signal">Funnet signal</string>
     <string name="carrier">Mottar signal</string>

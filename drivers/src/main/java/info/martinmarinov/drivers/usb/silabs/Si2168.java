@@ -62,7 +62,9 @@ public class Si2168 implements DvbFrontend {
 
     private final static int TIMEOUT_MS = 70;
     private final static int NO_STREAM_ID_FILTER = 0xFFFFFFFF;
-    private final static int DVBT2_STREAM_ID = 0;
+    /* Let the demodulator discover the active PLP.  Hard-coding PLP 0
+     * prevents multiplexes using another/default PLP from locking. */
+    private final static int DVBT2_STREAM_ID = NO_STREAM_ID_FILTER;
     private final static int DVBC_SYMBOL_RATE = 0;
 
     private final Resources resources;
@@ -83,6 +85,13 @@ public class Si2168 implements DvbFrontend {
     private DeliverySystem deliverySystem;
 
     private boolean hasLockStatus = false;
+    private boolean tsBusAcquired = false;
+
+    private static String bytesToHex(byte[] data) {
+        StringBuilder s = new StringBuilder();
+        for (byte b : data) s.append(String.format("%02x ", b & 0xff));
+        return s.toString().trim();
+    }
 
     public Si2168(DvbUsbDevice usbDevice, Resources resources, I2cAdapter i2c, int addr, int ts_mode, boolean ts_clock_inv, int ts_clock_mode, boolean ts_clock_gapped) {
         this.usbDevice = usbDevice;
@@ -132,6 +141,20 @@ public class Si2168 implements DvbFrontend {
         return EMPTY;
     }
 
+    /** Linux si2168_ts_bus_ctrl() equivalent. */
+    private synchronized void si2168TsBusCtrl(boolean acquire) throws DvbException {
+        if (tsBusAcquired == acquire) return;
+        if (ts_clock_mode == CxUsbDvbDevice.SI2168_TS_CLK_MANUAL) {
+            si2168_cmd_execute(new byte[] {0x14, 0x00, 0x0d, 0x10, (byte) 0xe8, 0x03}, 6, 4);
+        }
+        int mode = ts_clock_mode == CxUsbDvbDevice.SI2168_TS_CLK_MANUAL ? 0x20 : 0;
+        if (acquire) mode |= ts_mode;
+        if (ts_clock_gapped) mode |= 0x40;
+        si2168_cmd_execute(new byte[] {0x14, 0x00, 0x01, 0x10, (byte) mode, 0x00}, 6, 4);
+        tsBusAcquired = acquire;
+        Log.d(TAG, "TS bus " + (acquire ? "acquired" : "released") + " mode=0x" + Integer.toHexString(mode));
+    }
+
     @Override
     public synchronized DvbCapabilities getCapabilities() {
         return Si2168Data.CAPABILITIES;
@@ -169,6 +192,8 @@ public class Si2168 implements DvbFrontend {
     @Override
     public synchronized void release() {
         active = false;
+
+        try { si2168TsBusCtrl(false); } catch (DvbException e) { e.printStackTrace(); }
 
         /* Firmware B 4.0-11 or later loses warm state during sleep */
         if (version >= ('B' << 24 | 4 << 16 | 11)) {
@@ -238,16 +263,7 @@ public class Si2168 implements DvbFrontend {
             Log.d(TAG, "firmware version: "+((char) ((version >> 24) & 0xff))+" "+((version >> 16) & 0xff)+"."+((version >> 8) & 0xff)+"."+(version & 0xff));
 
         	/* set ts mode */
-            byte[] args = new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x01, (byte) 0x10, (byte) 0x00, (byte) 0x00};
-            args[4] |= ts_mode;
-            args[4] |= ts_clock_mode << 4;
-            if (ts_clock_gapped) {
-                args[4] |= 0x40;
-            }
-            si2168_cmd_execute(args, 6, 4);
-
-            /* set ts freq to 10Mhz*/
-            si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x0d, (byte) 0x10, (byte) 0xe8, (byte) 0x03}, 6, 4);
+            si2168TsBusCtrl(true);
 
             warm = true;
         }
@@ -255,6 +271,7 @@ public class Si2168 implements DvbFrontend {
         tuner.init();
 
         active = true;
+
     }
 
     private byte[] readFirmware(int resource) throws IOException {
@@ -315,6 +332,11 @@ public class Si2168 implements DvbFrontend {
         } else {
             bandwidth = 0x0f;
         }
+        Log.d(TAG, "tune frequency=" + frequency + " bandwidth=" + bandwidthHz
+                + " delivery=" + deliverySystem + " ds=0x" + Integer.toHexString(delivery_system)
+                + " bw=0x" + Integer.toHexString(bandwidth) + " tsMode=" + ts_mode
+                + " tsClockMode=" + ts_clock_mode + " tsClockInv=" + ts_clock_inv
+                + " tsClockGapped=" + ts_clock_gapped);
 
         /* program tuner */
         tuner.setParams(frequency, bandwidthHz, deliverySystem);
@@ -337,12 +359,16 @@ public class Si2168 implements DvbFrontend {
         if (deliverySystem == DeliverySystem.DVBT2) {
             /* select PLP */
             //noinspection PointlessBitwiseExpression,ConstantConditions
-            si2168_cmd_execute(new byte[] {
+            byte[] plpCmd = new byte[] {
                     (byte) 0x52, (byte) (DVBT2_STREAM_ID & 0xFF), DVBT2_STREAM_ID == NO_STREAM_ID_FILTER ? 0 : (byte) 1
-            }, 3, 1);
+            };
+            byte[] plpRes = si2168_cmd_execute(plpCmd, 3, 1);
+            Log.d(TAG, String.format("DVBT2 PLP select id=%d enabled=%d response=%02x",
+                    DVBT2_STREAM_ID, plpCmd[2] & 0xff, plpRes[0] & 0xff));
         }
 
-        si2168_cmd_execute(new byte[] {(byte) 0x51, (byte) 0x03}, 2, 12);
+        byte[] tuneRes = si2168_cmd_execute(new byte[] {(byte) 0x51, (byte) 0x03}, 2, 12);
+        Log.d(TAG, String.format("DVBT tune command response: %s", bytesToHex(tuneRes)));
         si2168_cmd_execute(new byte[] {(byte) 0x12, (byte) 0x08, (byte) 0x04}, 3, 3);
         si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x0c, (byte) 0x10, (byte) 0x12, (byte) 0x00}, 6, 4);
         si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x06, (byte) 0x10, (byte) 0x24, (byte) 0x00}, 6, 4);
@@ -360,8 +386,9 @@ public class Si2168 implements DvbFrontend {
         si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x0f, (byte) 0x10, (byte) 0x10, (byte) 0x00}, 6, 4);
         si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x09, (byte) 0x10, (byte) 0xe3, (byte) (0x08 | (ts_clock_inv ? 0x00 : 0x10))}, 6, 4);
 
-        byte[] cmd = new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x08, (byte) 0x10, (byte) 0xd7, (byte) 0x05};
-        cmd[5] |= ts_clock_inv ? 0xd7 : 0xcf;
+        byte[] cmd = new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x08, (byte) 0x10,
+                (byte) (ts_clock_inv ? 0xd7 : 0xcf),
+                (byte) (ts_clock_inv ? 0x05 : 0x33)};
         si2168_cmd_execute(cmd, 6, 4);
 
         si2168_cmd_execute(new byte[] {(byte) 0x14, (byte) 0x00, (byte) 0x01, (byte) 0x12, (byte) 0x00, (byte) 0x00}, 6, 4);
@@ -369,6 +396,8 @@ public class Si2168 implements DvbFrontend {
         si2168_cmd_execute(new byte[] {(byte) 0x85}, 1, 1);
 
         this.deliverySystem = deliverySystem;
+        si2168TsBusCtrl(true);
+        Log.d(TAG, "Finished tune frequency=" + frequency + " bandwidth=" + bandwidthHz);
     }
 
     @Override
@@ -416,6 +445,8 @@ public class Si2168 implements DvbFrontend {
             default:
                 return SetUtils.setOf();
         }
+        Log.d(TAG, String.format("status delivery=%s raw=%s lockState=%d status=%s",
+                deliverySystem, bytesToHex(res), ((res[2] & 0xff) >> 1) & 0x03, resultStatus));
 
         /* hook fe: need to resync the slave fifo when signal locks. */
         /* it need resync slave fifo when signal change from unlock to lock.*/

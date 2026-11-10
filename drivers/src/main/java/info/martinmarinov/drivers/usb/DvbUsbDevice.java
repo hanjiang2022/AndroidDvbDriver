@@ -21,6 +21,7 @@
 package info.martinmarinov.drivers.usb;
 
 import static info.martinmarinov.drivers.DvbException.ErrorCode.BAD_API_USAGE;
+import static info.martinmarinov.drivers.DvbException.ErrorCode.HARDWARE_EXCEPTION;
 import static info.martinmarinov.drivers.DvbException.ErrorCode.UNSUPPORTED_PLATFORM;
 import static info.martinmarinov.drivers.DvbException.ErrorCode.USB_PERMISSION_DENIED;
 import static info.martinmarinov.drivers.tools.Retry.retry;
@@ -105,6 +106,9 @@ public abstract class DvbUsbDevice extends DvbDevice {
             if (usbDeviceConnection == null)
                 throw new DvbException(USB_PERMISSION_DENIED, resources.getString(R.string.cannot_open_usb_connection));
             usbInterface = getUsbInterface();
+            if (!usbDeviceConnection.claimInterface(usbInterface.getUsbInterface(), true))
+                throw new DvbException(HARDWARE_EXCEPTION, resources.getString(R.string.cannot_open_usb_connection));
+            identifyStateBeforeOpen();
 
             retry(RETRIES, new ThrowingRunnable<DvbException>() {
                 @Override
@@ -129,6 +133,9 @@ public abstract class DvbUsbDevice extends DvbDevice {
             throw new DvbException(BAD_API_USAGE, e);
         }
     }
+
+    /** Optional device-specific pre-attach identification/reset hook. */
+    protected void identifyStateBeforeOpen() throws DvbException { }
 
     @Override
     public final void close() throws IOException {

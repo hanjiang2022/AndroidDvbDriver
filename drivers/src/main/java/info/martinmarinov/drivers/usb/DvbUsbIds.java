@@ -396,6 +396,10 @@ public class DvbUsbIds {
     public static final int USB_PID_MYGICA_D689 = 0xd811;
     public static final int USB_PID_MYGICA_T230 = 0xc688;
     public static final int USB_PID_GENIATECH_T230C = 0xc689;
+    public static final int USB_PID_MYGICA_T230A = 0x689a;
+    public static final int USB_PID_MYGICA_T230C2 = 0xc68a;
+    public static final int USB_PID_MYGICA_T230C_LITE = 0xc699;
+    public static final int USB_PID_MYGICA_T230C2_LITE = 0xc69a;
     public static final int USB_PID_ELGATO_EYETV_DIVERSITY = 0x0011;
     public static final int USB_PID_ELGATO_EYETV_DTT = 0x0021;
     public static final int USB_PID_ELGATO_EYETV_DTT_2 = 0x003f;

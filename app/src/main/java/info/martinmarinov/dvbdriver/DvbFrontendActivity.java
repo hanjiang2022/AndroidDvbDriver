@@ -73,6 +73,9 @@ public class DvbFrontendActivity extends FragmentActivity {
         editFreq = (EditText) findViewById(R.id.editFreq);
         spinBandwidth = (Spinner) findViewById(R.id.spinBandwidth);
         spinDeliverySystem = (Spinner) findViewById(R.id.spinDeliverySystem);
+        // T230/T230C test devices are primarily DVB-T2; make the test page
+        // start with the correct delivery system selected.
+        spinDeliverySystem.setSelection(1);
 
         btnStartStop = (Button) findViewById(R.id.btnStartStop);
         btnDumpTs = (Button) findViewById(R.id.btnDump);
